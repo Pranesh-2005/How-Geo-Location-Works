@@ -26,6 +26,14 @@ def get_db():
 def health():
     return {"status": "running"}
 
+@app.get("/kaithheathcheck")
+def kaithhealth_check():
+    return {"status": "healthy"}
+
+@app.get("/kaithhealthcheck")
+def kaith_health_check():
+    return {"status": "healthy"}
+
 @app.post("/users", response_model=schemas.UserResponse)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return services.create_user(db, user.name, user.latitude, user.longitude)
