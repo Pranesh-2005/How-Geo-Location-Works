@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Geo Matching 🌍</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #f4f6f8;
+      text-align: center;
+      padding: 30px;
+    }
+
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      width: 320px;
+      margin: auto;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    input, button {
+      width: 90%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    .users {
+      margin-top: 20px;
+      text-align: left;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .user-card {
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid #007bff;
+    }
+
+    .status {
+      font-size: 12px;
+      color: gray;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>📍 Geo Matching</h2>
+
+  <input type="text" id="name" placeholder="Enter your name">
+
+  <button onclick="registerUser()">Register (Use My Location)</button>
+
+  <button onclick="getNearby()">Find Nearby Users</button>
+
+  <div class="status" id="status"></div>
+
+  <div class="users" id="users"></div>
+</div>
+
+<script>
+  // 🔥 CHANGE THIS
+  const API_URL = "http://localhost:8000";
+
+  let userLocation = null;
+
+  // ✅ Get Location (One-time)
+  function getLocation() {
+    return new Promise((resolve, reject) => {
+      if (userLocation) {
+        resolve(userLocation);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          userLocation = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          };
+
+          document.getElementById("status").innerText =
+            "📍 Location captured";
+
+          resolve(userLocation);
+        },
+        (err) => {
+          reject(err);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000
+        }
+      );
+    });
+  }
+
+  // ✅ Register User
+  async function registerUser() {
+    const name = document.getElementById("name").value;
+
+    if (!name) {
+      alert("Please enter your name");
+      return;
+    }
+
+    try {
+      document.getElementById("status").innerText = "📡 Getting location...";
+
+      const loc = await getLocation();
+
+      document.getElementById("status").innerText = "🚀 Registering...";
+
+      const res = await fetch(`${API_URL}/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: name,
+          latitude: loc.lat,
+          longitude: loc.lng
+        })
+      });
+
+      if (!res.ok) throw new Error();
+
+      document.getElementById("status").innerText = "✅ Registered successfully";
+
+    } catch (err) {
+      document.getElementById("status").innerText =
+        "❌ Location permission required or error occurred";
+    }
+  }
+
+  // ✅ Fetch Nearby Users
+  async function getNearby() {
+    try {
+      document.getElementById("status").innerText = "🔍 Finding users...";
+
+      const loc = await getLocation();
+
+      const res = await fetch(
+        `${API_URL}/nearby?lat=${loc.lat}&lng=${loc.lng}&radius=5000`
+      );
+
+      if (!res.ok) throw new Error();
+
+      const users = await res.json();
+
+      const container = document.getElementById("users");
+
+      if (users.length === 0) {
+        container.innerHTML = "<p>No nearby users found</p>";
+        return;
+      }
+
+      container.innerHTML = "<h4>👥 Nearby Users</h4>";
+
+      users.forEach(u => {
+        container.innerHTML += `
+          <div class="user-card">
+            <strong>👤 ${u.name}</strong><br>
+            📍 (${u.latitude.toFixed(4)}, ${u.longitude.toFixed(4)})<br>
+            📏 ${u.distance} meters
+          </div>
+        `;
+      });
+
+      document.getElementById("status").innerText = "✅ Done";
+
+    } catch (err) {
+      document.getElementById("status").innerText =
+        "❌ Failed to fetch users";
+    }
+  }
+</script>
+
+</body>
+</html>
