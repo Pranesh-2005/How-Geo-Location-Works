@@ -9,11 +9,9 @@ def get_s2_cell(lat: float, lng: float) -> CellId:
     return CellId.from_lat_lng(latlng).parent(12)  # level 12 = good balance
 
 # 🔹 Get neighbor cells (IMPORTANT 🔥)
-def get_neighbor_cells(cell: CellId):
-    neighbors = []
-    cell.get_all_neighbors(cell.level(), neighbors)
-    return neighbors
-
+# 🔹 Get neighbor cells (FIXED)
+def get_neighbor_cells(cell):
+    return list(cell.get_all_neighbors(cell.level()))
 # 🔹 Haversine
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
