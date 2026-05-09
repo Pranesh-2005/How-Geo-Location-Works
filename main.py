@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title="Geo Matching API (S2 Version) 🚀")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for now (later restrict)
+    allow_origins=["https://how-geo-location-works.vercel.app", "http://localhost:3000"],  # for now (later restrict)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
