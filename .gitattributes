@@ -1,0 +1,5 @@
+*.ts linguist-generated
+*.tsx linguist-generated
+*.css linguist-generated
+*.js linguist-generated
+*.json linguist-generated
