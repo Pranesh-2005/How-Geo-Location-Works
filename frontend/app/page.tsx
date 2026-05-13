@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Users, UserPlus, Locate, Loader2, MapPin,
-  Radio, Navigation, RefreshCw, AlertCircle, CheckCircle2, User,
+  Radio, Navigation, RefreshCw, AlertCircle, CheckCircle2, User, ChevronUp, ChevronDown,
 } from "lucide-react";
 
 const API_URL = "https://how-geo-location-works.onrender.com";
@@ -76,7 +76,7 @@ function RadiusLayer({ location, radiusMeters }: { location: UserLocation | null
   return null;
 }
 
-// ─── Nearby users layer with full highlight support ───────────────────────────
+// ─── Nearby users layer ───────────────────────────────────────────────────────
 function NearbyUsersLayer({ users, selectedId, onSelect }: {
   users: NearbyUser[];
   selectedId: string | number | null;
@@ -89,22 +89,16 @@ function NearbyUsersLayer({ users, selectedId, onSelect }: {
   useEffect(() => {
     if (!map || !isLoaded) return;
     map.addSource(ids.src, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-
-    // Outer glow — bigger + brighter when selected
     map.addLayer({ id: ids.glow, type: "circle", source: ids.src, paint: {
       "circle-radius":  ["case", ["==", ["get","selected"], true], 30, 19] as maplibregl.ExpressionSpecification,
       "circle-color":   ["case", ["==", ["get","selected"], true], "#ea580c", "#f97316"] as maplibregl.ExpressionSpecification,
       "circle-opacity": ["case", ["==", ["get","selected"], true], 0.40, 0.15] as maplibregl.ExpressionSpecification,
       "circle-blur": 0.5,
     }});
-
-    // White border ring
     map.addLayer({ id: ids.ring, type: "circle", source: ids.src, paint: {
       "circle-radius": ["case", ["==", ["get","selected"], true], 18, 13] as maplibregl.ExpressionSpecification,
       "circle-color": "#ffffff", "circle-opacity": 1,
     }});
-
-    // Coloured inner dot
     map.addLayer({ id: ids.dot, type: "circle", source: ids.src, paint: {
       "circle-radius": ["case", ["==", ["get","selected"], true], 14, 10] as maplibregl.ExpressionSpecification,
       "circle-color":  ["case", ["==", ["get","selected"], true], "#ea580c", "#f97316"] as maplibregl.ExpressionSpecification,
@@ -112,8 +106,6 @@ function NearbyUsersLayer({ users, selectedId, onSelect }: {
       "circle-stroke-width": ["case", ["==", ["get","selected"], true], 2.5, 0] as maplibregl.ExpressionSpecification,
       "circle-opacity": 1,
     }});
-
-    // Name label — orange + bold when selected
     map.addLayer({ id: ids.label, type: "symbol", source: ids.src,
       layout: {
         "text-field": ["get","name"] as maplibregl.ExpressionSpecification,
@@ -182,13 +174,20 @@ export default function GeoMatching() {
   const [radius, setRadius] = useState(5000);
   const [showRadius, setShowRadius] = useState(true);
   const [panelTab, setPanelTab] = useState<"register"|"nearby">("register");
+  // Mobile: panel can be collapsed to a bottom sheet handle
+  const [panelExpanded, setPanelExpanded] = useState(true);
 
   const getLocation = useCallback((): Promise<UserLocation> => new Promise((res, rej) => {
     if (userLocation) { res(userLocation); return; }
     if (!navigator.geolocation) { rej(new Error("Geolocation not supported")); return; }
     setLocating(true); setLocError(null);
     navigator.geolocation.getCurrentPosition(
-      pos => { const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }; setUserLocation(loc); setLocating(false); mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 13, duration: 1200 }); res(loc); },
+      pos => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        setUserLocation(loc); setLocating(false);
+        mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 13, duration: 1200 });
+        res(loc);
+      },
       err => { setLocating(false); setLocError(err.message); rej(err); },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -221,83 +220,211 @@ export default function GeoMatching() {
   }, [getLocation, radius]);
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-background font-sans">
+    // Use dvh for reliable full-screen on mobile browsers with dynamic toolbars.
+    // Fall back to 100vh for browsers that don't support dvh.
+    <div
+      className="relative w-full overflow-hidden bg-background font-sans"
+      style={{ height: "100dvh" }}
+    >
 
-      {/* PANEL */}
-      <div className="absolute left-3 top-3 z-20 flex w-72 flex-col rounded-2xl border border-border bg-background/97 shadow-2xl backdrop-blur-xl overflow-hidden max-h-[calc(100vh-24px)]">
+      {/* ── PANEL
+          Desktop: fixed card top-left
+          Mobile: bottom sheet that can be expanded/collapsed
+          We use a combination of fixed classes + inline responsive overrides via
+          Tailwind's sm: breakpoint so nothing requires JS viewport detection.
+      ── */}
+      <div
+        className={[
+          // Shared
+          "absolute z-20 flex flex-col border border-border bg-background/97 shadow-2xl backdrop-blur-xl overflow-hidden",
+          // Desktop (sm+): top-left card with constrained max height
+          "sm:left-3 sm:top-3 sm:w-72 sm:rounded-2xl sm:max-h-[calc(100dvh-24px)]",
+          // Mobile (<sm): bottom sheet spanning full width, rounded top corners
+          "left-0 right-0 bottom-0 rounded-t-2xl sm:right-auto sm:bottom-auto",
+          // Mobile collapsed / expanded height
+          panelExpanded
+            ? "max-h-[80dvh]"   // expanded: up to 80% of viewport
+            : "max-h-[52px]",   // collapsed: just the header handle
+          // Smooth height transition on mobile
+          "transition-[max-height] duration-300 ease-in-out sm:transition-none",
+        ].join(" ")}
+      >
 
-        {/* Header */}
-        <div className="flex items-center gap-2.5 border-b border-border px-4 py-3.5 shrink-0">
-          <div className="flex size-8 items-center justify-center rounded-xl bg-primary"><Radio className="size-4 text-primary-foreground" /></div>
-          <div><h1 className="text-sm font-black tracking-tight text-foreground">Geo Matching</h1><p className="text-[10px] text-muted-foreground">Find people near you</p></div>
-          {userLocation && <div className="ml-auto flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5"><div className="size-1.5 rounded-full bg-blue-500 animate-pulse" /><span className="text-[9px] font-semibold text-blue-600 dark:text-blue-400">Live</span></div>}
+        {/* Header — doubles as drag handle on mobile */}
+        <div
+          className="flex items-center gap-2.5 border-b border-border px-4 shrink-0 cursor-pointer sm:cursor-default"
+          style={{ minHeight: 52 }} // consistent tap target height on mobile
+          onClick={() => setPanelExpanded(e => !e)}
+          // On desktop, clicking header should not toggle collapse
+          onClickCapture={e => { if (window.innerWidth >= 640) e.stopPropagation(); }}
+        >
+          <div className="flex size-8 items-center justify-center rounded-xl bg-primary shrink-0">
+            <Radio className="size-4 text-primary-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-sm font-black tracking-tight text-foreground truncate">Geo Matching</h1>
+            <p className="text-[10px] text-muted-foreground truncate">Find people near you</p>
+          </div>
+
+          {/* Live badge */}
+          {userLocation && (
+            <div className="flex items-center gap-1 rounded-full bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 shrink-0">
+              <div className="size-1.5 rounded-full bg-blue-500 animate-pulse" />
+              <span className="text-[9px] font-semibold text-blue-600 dark:text-blue-400">Live</span>
+            </div>
+          )}
+
+          {/* Mobile collapse chevron — hidden on desktop */}
+          <div className="sm:hidden shrink-0 ml-1 text-muted-foreground">
+            {panelExpanded ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+          </div>
         </div>
 
         {/* Tabs */}
         <div className="flex border-b border-border shrink-0">
           {(["register","nearby"] as const).map(tab => (
-            <button key={tab} onClick={() => setPanelTab(tab)}
-              className={`flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors ${panelTab===tab ? "border-b-2 border-primary text-primary bg-primary/5" : "text-muted-foreground hover:text-foreground"}`}>
-              {tab==="register" ? <UserPlus className="size-3.5" /> : <Users className="size-3.5" />}{tab}
+            <button
+              key={tab}
+              onClick={() => { setPanelTab(tab); setPanelExpanded(true); }}
+              // min-h-[44px] ensures 44px minimum touch target per Apple HIG
+              className={`flex flex-1 items-center justify-center gap-1.5 min-h-[44px] text-xs font-semibold uppercase tracking-wide transition-colors ${
+                panelTab===tab
+                  ? "border-b-2 border-primary text-primary bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab==="register" ? <UserPlus className="size-3.5" /> : <Users className="size-3.5" />}
+              {tab}
             </button>
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* Scrollable content — -webkit-overflow-scrolling for iOS momentum scroll */}
+        <div
+          className="flex-1 overflow-y-auto"
+          style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+        >
 
-          {/* Register */}
+          {/* ── Register tab ── */}
           {panelTab === "register" && (
             <div className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground">Enter your name and allow location to register yourself on the map.</p>
+
               <div className="relative">
-                <User className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input className="w-full rounded-xl border border-border bg-muted/20 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-primary/50 focus:bg-background transition-colors placeholder:text-muted-foreground"
-                  placeholder="Your name" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key==="Enter" && registerUser()} />
+                <User className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <input
+                  className="w-full rounded-xl border border-border bg-muted/20 py-3 pl-9 pr-3 text-sm outline-none focus:border-primary/50 focus:bg-background transition-colors placeholder:text-muted-foreground"
+                  // py-3 instead of py-2.5 for better touch target height (~44px with text)
+                  placeholder="Your name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  onKeyDown={e => e.key==="Enter" && registerUser()}
+                  // Prevent iOS zoom on focus (font-size must be ≥16px or set explicitly)
+                  style={{ fontSize: 16 }}
+                  autoComplete="name"
+                  autoCapitalize="words"
+                />
               </div>
-              <Button className="w-full gap-2" onClick={registerUser} disabled={!name.trim()||registering}>
-                {registering ? <><Loader2 className="size-4 animate-spin"/>Registering…</> : <><MapPin className="size-4"/>Register My Location</>}
+
+              {/* min-h-[44px] on Button is important for touch */}
+              <Button className="w-full gap-2 min-h-[44px]" onClick={registerUser} disabled={!name.trim()||registering}>
+                {registering
+                  ? <><Loader2 className="size-4 animate-spin"/>Registering…</>
+                  : <><MapPin className="size-4"/>Register My Location</>
+                }
               </Button>
-              {locating && <div className="flex items-center gap-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-600 dark:text-blue-400"><Loader2 className="size-3.5 animate-spin shrink-0"/>Getting your location…</div>}
-              {locError && <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0"/>{locError}</div>}
-              {registerStatus==="ok" && <div className="flex items-center gap-2 rounded-xl bg-green-50 dark:bg-green-950/40 px-3 py-2 text-xs text-green-700 dark:text-green-400"><CheckCircle2 className="size-3.5 shrink-0"/>Registered! Switch to Nearby tab.</div>}
-              {registerStatus==="err" && <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0"/>Registration failed. Try again.</div>}
+
+              {locating && (
+                <div className="flex items-center gap-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 px-3 py-2.5 text-xs text-blue-600 dark:text-blue-400">
+                  <Loader2 className="size-3.5 animate-spin shrink-0"/>Getting your location…
+                </div>
+              )}
+              {locError && (
+                <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+                  <AlertCircle className="size-3.5 shrink-0"/>{locError}
+                </div>
+              )}
+              {registerStatus==="ok" && (
+                <div className="flex items-center gap-2 rounded-xl bg-green-50 dark:bg-green-950/40 px-3 py-2.5 text-xs text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="size-3.5 shrink-0"/>Registered! Switch to Nearby tab.
+                </div>
+              )}
+              {registerStatus==="err" && (
+                <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+                  <AlertCircle className="size-3.5 shrink-0"/>Registration failed. Try again.
+                </div>
+              )}
+
               {!userLocation && !locating && (
-                <button onClick={() => getLocation()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-2 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-colors">
+                <button
+                  onClick={() => getLocation()}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border min-h-[44px] text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 active:bg-muted/20 transition-colors"
+                >
                   <Locate className="size-3.5"/>Just capture my location
                 </button>
               )}
+
               {userLocation && (
-                <div className="rounded-xl bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                <div className="rounded-xl bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground space-y-0.5">
                   <p className="font-semibold text-foreground">📍 Location captured</p>
                   <p className="tabular-nums">{userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}</p>
                   <p>±{Math.round(userLocation.accuracy)}m accuracy</p>
                 </div>
               )}
+
+              {/* Safe area bottom padding so content isn't hidden behind home bar */}
+              <div className="sm:hidden h-4" style={{ paddingBottom: "env(safe-area-inset-bottom)" }} />
             </div>
           )}
 
-          {/* Nearby */}
+          {/* ── Nearby tab ── */}
           {panelTab === "nearby" && (
             <div className="flex flex-col">
               <div className="p-4 space-y-3 border-b border-border">
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground font-medium">Search radius</span>
-                    <span className="font-bold text-foreground tabular-nums">{radius>=1000 ? `${(radius/1000).toFixed(1)} km` : `${radius} m`}</span>
+                    <span className="font-bold text-foreground tabular-nums">
+                      {radius>=1000 ? `${(radius/1000).toFixed(1)} km` : `${radius} m`}
+                    </span>
                   </div>
-                  <input type="range" min={500} max={50000} step={500} value={radius} onChange={e=>setRadius(Number(e.target.value))} className="w-full accent-primary"/>
-                  <div className="flex justify-between text-[9px] text-muted-foreground/50"><span>500m</span><span>50 km</span></div>
+                  {/* Range input: height + padding for reliable touch target across browsers */}
+                  <input
+                    type="range" min={500} max={50000} step={500} value={radius}
+                    onChange={e=>setRadius(Number(e.target.value))}
+                    className="w-full accent-primary"
+                    style={{ height: 20, cursor: "pointer" }}
+                  />
+                  <div className="flex justify-between text-[9px] text-muted-foreground/50">
+                    <span>500m</span><span>50 km</span>
+                  </div>
                 </div>
+
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Show radius on map</span>
-                  <button onClick={() => setShowRadius(s=>!s)} className={`relative h-5 w-9 rounded-full transition-colors ${showRadius?"bg-primary":"bg-muted"}`}>
-                    <div className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition-transform ${showRadius?"translate-x-4":"translate-x-0.5"}`}/>
+                  {/* Toggle — min 44px touch area via padding trick */}
+                  <button
+                    onClick={() => setShowRadius(s=>!s)}
+                    className={`relative h-6 w-11 rounded-full transition-colors ${showRadius?"bg-primary":"bg-muted"}`}
+                    aria-label="Toggle radius on map"
+                    style={{ minWidth: 44, minHeight: 32 }} // extend tap area without changing visual
+                  >
+                    <div className={`absolute top-1 size-4 rounded-full bg-white shadow transition-transform ${showRadius?"translate-x-[1.375rem]":"translate-x-1"}`}/>
                   </button>
                 </div>
-                <Button className="w-full gap-2" onClick={getNearby} disabled={fetching}>
-                  {fetching ? <><Loader2 className="size-4 animate-spin"/>Searching…</> : <><RefreshCw className="size-4"/>Find Nearby Users</>}
+
+                <Button className="w-full gap-2 min-h-[44px]" onClick={getNearby} disabled={fetching}>
+                  {fetching
+                    ? <><Loader2 className="size-4 animate-spin"/>Searching…</>
+                    : <><RefreshCw className="size-4"/>Find Nearby Users</>
+                  }
                 </Button>
-                {fetchError && <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0"/>{fetchError}</div>}
+
+                {fetchError && (
+                  <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+                    <AlertCircle className="size-3.5 shrink-0"/>{fetchError}
+                  </div>
+                )}
               </div>
 
               {/* User list */}
@@ -314,18 +441,25 @@ export default function GeoMatching() {
                   const id = u.id ?? i;
                   const isSel = selectedUser?.id === id;
                   return (
-                    <button key={id}
-                      onClick={() => { mapRef.current?.flyTo({ center:[u.longitude,u.latitude], zoom:14, duration:900 }); setSelectedUser({ user:u, coords:[u.longitude,u.latitude], id }); }}
-                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                    <button
+                      key={id}
+                      onClick={() => {
+                        mapRef.current?.flyTo({ center:[u.longitude,u.latitude], zoom:14, duration:900 });
+                        setSelectedUser({ user:u, coords:[u.longitude,u.latitude], id });
+                        // On mobile, collapse panel so user can see the map
+                        if (window.innerWidth < 640) setPanelExpanded(false);
+                      }}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all duration-200 min-h-[60px] ${
                         isSel
                           ? "border-orange-400 bg-orange-50 dark:bg-orange-950/40 ring-2 ring-orange-400/30 shadow-md"
-                          : "border-border bg-muted/10 hover:bg-orange-50/60 hover:border-orange-200 dark:hover:bg-orange-950/20 dark:hover:border-orange-800"
+                          : "border-border bg-muted/10 hover:bg-orange-50/60 hover:border-orange-200 dark:hover:bg-orange-950/20 dark:hover:border-orange-800 active:bg-orange-50/80"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        {/* Avatar */}
                         <div className={`flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-black transition-all ${
-                          isSel ? "bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300" : "bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400"
+                          isSel
+                            ? "bg-orange-500 text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300"
+                            : "bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400"
                         }`}>
                           {u.name[0]?.toUpperCase()}
                         </div>
@@ -333,12 +467,12 @@ export default function GeoMatching() {
                           <p className={`font-semibold text-sm truncate ${isSel ? "text-orange-700 dark:text-orange-300" : "text-foreground"}`}>{u.name}</p>
                           <p className="text-[10px] text-muted-foreground tabular-nums">{u.latitude.toFixed(4)}, {u.longitude.toFixed(4)}</p>
                         </div>
-                        {/* Distance badge */}
-                        <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${isSel ? "bg-orange-500 text-white" : "bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400"}`}>
+                        <div className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          isSel ? "bg-orange-500 text-white" : "bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400"
+                        }`}>
                           {fmtDist(u.distance)}
                         </div>
                       </div>
-                      {/* Selected bar */}
                       {isSel && (
                         <div className="mt-2 flex items-center gap-1.5 text-[10px] text-orange-600 dark:text-orange-400 font-semibold">
                           <div className="size-1.5 rounded-full bg-orange-500 animate-pulse"/>Highlighted on map
@@ -347,31 +481,63 @@ export default function GeoMatching() {
                     </button>
                   );
                 })}
+
+                {/* Safe area bottom padding */}
+                <div className="sm:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)", height: 8 }} />
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* ── Stats bar
+          Centered at bottom — on mobile, sits above the panel handle so it
+          doesn't overlap. We use bottom padding to account for panel.
+      ── */}
       {nearbyUsers.length > 0 && (
-        <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2">
-          <div className="flex items-center gap-4 rounded-2xl border border-border bg-background/97 px-5 py-2.5 shadow-2xl backdrop-blur-xl text-sm">
-            <div className="flex items-center gap-1.5 text-orange-500"><Users className="size-4"/><span className="font-black text-base">{nearbyUsers.length}</span></div>
+        <div
+          className={[
+            "absolute left-1/2 z-20 -translate-x-1/2",
+            // Desktop: near bottom of screen; mobile: higher up to clear the panel
+            "sm:bottom-4",
+            panelExpanded ? "bottom-[calc(80dvh+12px)]" : "bottom-[calc(52px+12px)]",
+            "transition-[bottom] duration-300 ease-in-out sm:transition-none",
+            // Ensure it never clips the edges on narrow screens
+            "max-w-[calc(100vw-24px)]",
+          ].join(" ")}
+        >
+          <div className="flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-border bg-background/97 px-4 py-2.5 shadow-2xl backdrop-blur-xl text-sm whitespace-nowrap">
+            <div className="flex items-center gap-1.5 text-orange-500">
+              <Users className="size-4 shrink-0"/>
+              <span className="font-black text-base">{nearbyUsers.length}</span>
+            </div>
             <div className="h-4 w-px bg-border"/>
-            <span className="text-muted-foreground">within <span className="font-semibold text-foreground">{radius>=1000?`${(radius/1000).toFixed(0)} km`:`${radius}m`}</span></span>
+            <span className="text-muted-foreground text-xs">
+              within <span className="font-semibold text-foreground">{radius>=1000?`${(radius/1000).toFixed(0)} km`:`${radius}m`}</span>
+            </span>
             <div className="h-4 w-px bg-border"/>
-            <span className="text-muted-foreground text-xs">nearest: <span className="font-semibold text-foreground">{fmtDist(Math.min(...nearbyUsers.map(u=>u.distance)))}</span></span>
+            <span className="text-muted-foreground text-xs">
+              nearest: <span className="font-semibold text-foreground">{fmtDist(Math.min(...nearbyUsers.map(u=>u.distance)))}</span>
+            </span>
           </div>
         </div>
       )}
 
-      {/* MAP */}
+      {/* ── MAP ── */}
       <Map ref={mapRef} center={[78.9629, 20.5937]} zoom={4} className="h-full w-full" fadeDuration={200}>
+        {/*
+          On mobile, push map controls to the right but leave enough top gap so
+          they don't sit under the status bar notch. On desktop keep top-right.
+        */}
         <MapControls position="top-right" showZoom showCompass showLocate showFullscreen/>
+
         <LiveLocationLayer location={userLocation}/>
         {showRadius && <RadiusLayer location={userLocation} radiusMeters={radius}/>}
-        <NearbyUsersLayer users={nearbyUsers} selectedId={selectedUser?.id??null} onSelect={(u,coords,id)=>setSelectedUser({user:u,coords,id})}/>
+        <NearbyUsersLayer
+          users={nearbyUsers}
+          selectedId={selectedUser?.id??null}
+          onSelect={(u,coords,id) => setSelectedUser({user:u,coords,id})}
+        />
 
         {/* My marker */}
         {userLocation && (
@@ -387,7 +553,7 @@ export default function GeoMatching() {
                 <p className="font-semibold text-foreground">📍 {name||"Me"}</p>
                 <p className="text-xs text-muted-foreground tabular-nums">{userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}</p>
                 <p className="text-[10px] text-muted-foreground">±{Math.round(userLocation.accuracy)}m accuracy</p>
-                <Button size="sm" className="w-full mt-1 gap-1.5 text-xs" onClick={()=>{getNearby();setPanelTab("nearby");}}>
+                <Button size="sm" className="w-full mt-1 gap-1.5 text-xs min-h-[40px]" onClick={()=>{getNearby();setPanelTab("nearby");}}>
                   <Navigation className="size-3"/>Find nearby from here
                 </Button>
               </div>
@@ -397,7 +563,15 @@ export default function GeoMatching() {
 
         {/* Selected user popup */}
         {selectedUser && (
-          <MapPopup longitude={selectedUser.coords[0]} latitude={selectedUser.coords[1]} onClose={()=>setSelectedUser(null)} closeButton closeOnClick={false} focusAfterOpen={false} offset={22}>
+          <MapPopup
+            longitude={selectedUser.coords[0]}
+            latitude={selectedUser.coords[1]}
+            onClose={() => setSelectedUser(null)}
+            closeButton
+            closeOnClick={false}
+            focusAfterOpen={false}
+            offset={22}
+          >
             <div className="space-y-2 min-w-48">
               <div className="flex items-center gap-2.5">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-base font-black text-white shadow-lg shadow-orange-500/40 ring-2 ring-orange-300">
@@ -422,7 +596,15 @@ export default function GeoMatching() {
 
         {/* You are here popup */}
         {userLocation && (
-          <MapPopup longitude={userLocation.lng} latitude={userLocation.lat} closeButton={false} closeOnClick={false} focusAfterOpen={false} offset={22} className="p-0">
+          <MapPopup
+            longitude={userLocation.lng}
+            latitude={userLocation.lat}
+            closeButton={false}
+            closeOnClick={false}
+            focusAfterOpen={false}
+            offset={22}
+            className="p-0"
+          >
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs">
               <div className="size-1.5 rounded-full bg-blue-500 animate-pulse"/>
               <span className="font-semibold text-blue-600 dark:text-blue-400">You are here</span>
